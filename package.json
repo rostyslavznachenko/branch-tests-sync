@@ -4,5 +4,8 @@
   },
   "devDependencies": {
     "cypress": "^13.2.0"
+  },
+  "dependencies": {
+    "find-cypress-specs": "^1.35.1"
   }
 }
