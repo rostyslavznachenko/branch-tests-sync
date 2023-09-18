@@ -22,6 +22,16 @@ describe('example to-do app', () =>
     cy.visit('https://example.cypress.io/todo')
   })
 
+  it('todo items should be visible', () =>
+  {
+    cy.get('.todo-list li').should('be.visible')
+  })
+
+  it('todo items should be visible', () =>
+  {
+    cy.get('.todo-list li').should('be.visible')
+  })
+
   it('displays two todo items by default', () =>
   {
     // We use the `cy.get()` command to get all elements that match the selector.
