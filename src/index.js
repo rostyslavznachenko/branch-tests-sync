@@ -1,55 +1,90 @@
 const { getTests } = require('find-cypress-specs')
-const { execSync } = require('child_process');
+const { execSync } = require('child_process')
 const { collectTests, getDifferenceBetweenBranches } = require('../src/testmanager.js')
+const debug = require('debug')('branch-sync')
+const debugGit = require('debug')('branch-sync:git')
+const arg = require('arg')
 const fs = require('fs')
+const path = require('path')
 
-const TEMP_FILE_NAME = 'temp.spec.js'
+const args = arg({
+    '--branch': String
+})
+
+const remoteBranch = args['--branch'] || 'main'
+const folderPath = path.resolve(__dirname, 'diff-result');
+if (!fs.existsSync(folderPath))
+{
+    fs.mkdirSync(folderPath, { recursive: true });
+}
+const tempSpecFile = `${folderPath}\\temp.spec.js`
 
 const currentBranch = execSync('git branch --show-current').toString()
-const changedSpecs = execSync('npx find-cypress-specs --branch main')
+const changedSpecs = execSync(`npx find-cypress-specs --branch ${remoteBranch}`)
     .toString()
     .trim()
     .split(',')
     .filter(Boolean)
 if (!changedSpecs)
 {
-    console.log(`There are no changed spec files in the current branch: ${currentBranch}`)
+    exitIfNoSpecFilesChanged()
 }
 
-console.log(changedSpecs)
-execSync('git fetch origin main:main')
+debug('Changed spec files are %s', changedSpecs)
+
+debugGit('Fetching changes from the remote repository \'%s\' and updates the local main branch with those changes.', remoteBranch)
+execSync(`git fetch origin ${remoteBranch}:main`)
 const results = {}
 changedSpecs.forEach(changedSpec =>
 {
     const { jsonResults, tagTestCounts } = getTests([changedSpec])
 
+    debugGit('Checking if %s exist on remote repository', changedSpec)
     const checkIfSpecExists = execSync(`git ls-tree -r main --name-only | grep ${changedSpec} || true`).toString()
     if (checkIfSpecExists)
     {
-        console.log(`Spec file ${changedSpec} exist on remote. Comparing results`)
+        debug('Spec file %s exist on remote repository. Saving remote version and comparing with local')
         const tempRemote = execSync(`git show main:${changedSpec}`).toString()
 
-        fs.writeFileSync(TEMP_FILE_NAME, tempRemote, 'utf8')
-        const { jsonResults: remoteJsonResults, tagTestCounts: remoteTagTestCounts } = getTests([TEMP_FILE_NAME])
-
+        fs.writeFileSync(tempSpecFile, tempRemote, 'utf8')
+        const { jsonResults: remoteJsonResults, tagTestCounts: remoteTagTestCounts } = getTests([tempSpecFile])
 
         const diff = getDifferenceBetweenBranches(
-            collectTests(remoteJsonResults[TEMP_FILE_NAME].tests),
+            collectTests(remoteJsonResults[tempSpecFile].tests),
             collectTests(jsonResults[changedSpec].tests))
         results[changedSpec] = diff
     } else
     {
-        console.log(`Spec file doesn't exist on remote. Don't need to compare results with remote as we need to run whole spec. Spec file ${changedSpec}`)
+        debug('Spec file %s doesn\'t exist on remote. Don\'t need to compare results with remote as we need to run the whole spec', changedSpec)
         results[changedSpec] = collectTests(jsonResults[changedSpec].tests)
     }
 })
 
+if (Object.keys(results).length === 0)
+{
+    exitIfNoSpecFilesChanged()
+}
+
+const diffFile = `${folderPath}\\branch-sync.json`
+const output = {
+    specs: changedSpecs,
+    testTitles: [].concat(...Object.values(results).map(result => result.map(test => test.name))).join(';')
+}
+debug('Preparing diff test results for grep to file %s', diffFile)
+fs.writeFileSync(diffFile, JSON.stringify(output, null, 2))
+
 try
 {
-    fs.unlinkSync(TEMP_FILE_NAME);
-    console.log(`File "${TEMP_FILE_NAME}" has been deleted.`);
+    debug('Deleting temporary spec file used for remote version')
+    fs.unlinkSync(tempSpecFile);
 } catch (err)
 {
-    console.error(`Error deleting file "${TEMP_FILE_NAME}":`, err);
+    throw new Error(`Error deleting file "${tempSpecFile}": ${err.message}`)
 }
-console.log(JSON.stringify(results, null, 2))
+
+function exitIfNoSpecFilesChanged()
+{
+    debug('There are no changed spec files in the current branch %s', currentBranch)
+    debug('Exiting...')
+    process.exit(0)
+}
