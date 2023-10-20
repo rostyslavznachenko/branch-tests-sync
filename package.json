@@ -1,9 +1,10 @@
 {
   "scripts": {
-    "cy:open": "cypress open",
+    "run-new-tests": "node src/runCypress.js cypress run",
     "prepare": "husky install"
   },
   "devDependencies": {
+    "@cypress/grep": "^4.0.1",
     "cypress": "13.3.2",
     "eslint": "^8.13.0",
     "eslint-config-semistandard": "^17.0.0",
@@ -15,7 +16,8 @@
     "find-cypress-specs": "^1.36.4",
     "husky": "^8.0.0",
     "lint-staged": "^15.0.2",
-    "prettier": "3.0.3"
+    "prettier": "3.0.3",
+    "yargs": "^17.7.2"
   },
   "lint-staged": {
     "{src,cypress}/**/*.{js, ts}": "prettier --write",
